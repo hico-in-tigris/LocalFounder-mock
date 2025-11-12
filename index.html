@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- CDN Libraries: React 18, ReactDOM 18, MUI v5 (@mui/material), Emotion (react/styled), @mui/icons-material -->
+  <!-- Usage: Open index.html directly in a browser. Hash-based routing (#/dashboard etc.) controls views. -->
+  <!-- Extension ideas: replace mockAI functions with real services, wire scoring to backend, integrate auth/payment SDKs. -->
+  <title>起業OS（協力隊）PoC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    body { margin: 0; font-family: 'Roboto', sans-serif; background-color: #f5f7f5; }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@emotion/react@11.11.3/umd/emotion-react.umd.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@emotion/styled@11.11.0/umd/emotion-styled.umd.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@mui/material@5.15.15/umd/material-ui.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@mui/icons-material@5.15.15/umd/material-ui-icons.development.js" crossorigin></script>
+
+  <script>
+    const { useState, useEffect, useMemo, useCallback, useContext, createContext, Fragment } = React;
+    const {
+      ThemeProvider,
+      createTheme,
+      CssBaseline,
+      Box,
+      AppBar,
+      Toolbar,
+      Typography,
+      IconButton,
+      Button,
+      Drawer,
+      List,
+      ListItemButton,
+      ListItemIcon,
+      ListItemText,
+      Divider,
+      TextField,
+      Grid,
+      Card,
+      CardContent,
+      CardActions,
+      Chip,
+      Stack,
+      Paper,
+      Avatar,
+      Tooltip,
+      Dialog,
+      DialogTitle,
+      DialogContent,
+      DialogActions,
+      MenuItem,
+      Snackbar,
+      Alert,
+      Tabs,
+      Tab,
+      Table,
+      TableBody,
+      TableCell,
+      TableContainer,
+      TableHead,
+      TableRow,
+      Switch,
+      FormControlLabel,
+      Select,
+      InputLabel,
+      FormControl,
+      Stepper,
+      Step,
+      StepLabel,
+      LinearProgress,
+      Checkbox,
+      Badge
+    } = MaterialUI;
+    const Icons = MaterialUIIcons;
+
+    // ===== Utility Hooks =====
+    function useHashRouter(defaultRoute = '#/dashboard') {
+      const [route, setRoute] = useState(() => window.location.hash || defaultRoute);
+      useEffect(() => {
+        if (!window.location.hash) {
+          window.location.hash = defaultRoute;
+        }
+        const handler = () => setRoute(window.location.hash || defaultRoute);
+        window.addEventListener('hashchange', handler);
+        return () => window.removeEventListener('hashchange', handler);
+      }, [defaultRoute]);
+      const navigate = useCallback((hash) => {
+        window.location.hash = hash;
+      }, []);
+      return [route, navigate];
+    }
+
+    function useLocalStorageState(key, initialValue) {
+      const [value, setValue] = useState(() => {
+        const stored = window.localStorage.getItem(key);
+        if (stored !== null) {
+          try { return JSON.parse(stored); } catch (e) { return stored; }
+        }
+        return typeof initialValue === 'function' ? initialValue() : initialValue;
+      });
+      useEffect(() => {
+        if (value === undefined) return;
+        window.localStorage.setItem(key, JSON.stringify(value));
+      }, [key, value]);
+      return [value, setValue];
+    }
+
+    // ===== Mock Generators =====
+    const mockAI = {
+      summarizeExperiment(exp) {
+        const moods = ['堅調', '挑戦中', '好感触'];
+        const tagsPool = ['販促', '宿泊', '地域連携', 'DX', '集客', '顧客体験'];
+        const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+        return {
+          summaryAI: `${exp.title}は${pick(moods)}。仮説「${exp.hypothesis || '---'}」に対し、顧客反応は${['高め', '横ばい', '改善余地'][Math.floor(Math.random()*3)]}です。`,
+          nextActionAI: [1,2,3].map((i) => `${exp.title}向けフォロー${i}：${pick(['SNS告知強化', '現地ヒアリング', '価格テスト'])}`),
+          tags: Array.from({length:3}, () => pick(tagsPool))
+        };
+      },
+      nextThreeActions(state) {
+        const suggestions = [
+          { title: '観光事業者と協業ミーティング', reason: '宿泊プランの共同販売を検討', cta: '打ち合わせ日程を調整' },
+          { title: '週末マルシェ出店の結果共有', reason: '学びをPlanに反映', cta: 'レポートをまとめる' },
+          { title: '次の補助金ドラフト整理', reason: '締切まで1週間', cta: '必要資料を棚卸し' },
+          { title: 'OTAサイトの口コミ返信', reason: '顧客満足度向上', cta: 'テンプレートを下書き' },
+          { title: '地域メディアへPR送付', reason: '夏休み集客を狙う', cta: 'ドラフトメールを送る' }
+        ];
+        return suggestions.slice(0,3);
+      }
+    };
+
+    function scoreFunding(profile, program, kpiRecords, permitTasks) {
+      const today = new Date();
+      const daysUntil = Math.ceil((new Date(program.deadline) - today) / (1000*60*60*24));
+      let score = 0;
+      if (program.region === profile.region) score += 25;
+      if (!program.industry || program.industry === profile.industry) score += 25;
+      if (program.stage === profile.stage) score += 15;
+      if ((profile.headcount || 0) >= 1) score += 10;
+      if (daysUntil <= 60) score += 5;
+      const recent = kpiRecords.slice(-2);
+      if (recent.length === 2) {
+        if ((recent[1].revenue || 0) > (recent[0].revenue || 0)) score += 10;
+      }
+      const anyProgress = Object.values(permitTasks).some(tasks => tasks.some(t => t.status !== 'Todo'));
+      if (anyProgress) score += 10;
+      return Math.min(score, 100);
+    }
+
+    // ===== Data Context =====
+    const DataContext = createContext(null);
+    function useDataContext() {
+      return useContext(DataContext);
+    }
+
+    // ===== Default Data =====
+    function defaultStartupProfile() {
+      return {
+        name: '宿泊ロッジ試行プロジェクト',
+        termStart: '2025-04-01',
+        termEnd: '2028-03-31',
+        region: '北海道',
+        industry: '宿泊',
+        stage: 'Running',
+        headcount: 2,
+        goal: '地域滞在型宿泊で年間1,000組のファンを獲得'
+      };
+    }
+
+    function defaultExperiments() {
+      return [
+        {
+          id: 'exp-1',
+          title: '週末マルシェ販売テスト',
+          hypothesis: '地元食材を使った朝食セットは20%追加購入される',
+          startDate: '2024-05-01',
+          endDate: '2024-05-07',
+          cost: 20000,
+          revenue: 45000,
+          bookings: 15,
+          survey: 4,
+          status: 'Learned',
+          notes: 'アンケート結果を整理して次の仕入れを調整'
+        },
+        {
+          id: 'exp-2',
+          title: '平日ワーケーションプラン',
+          hypothesis: '平日滞在を15%伸ばせる',
+          startDate: '2024-04-15',
+          endDate: '2024-05-31',
+          cost: 50000,
+          revenue: 80000,
+          bookings: 10,
+          survey: 3,
+          status: 'Running',
+          notes: '法人向けにヒアリング中'
+        },
+        {
+          id: 'exp-3',
+          title: '地元体験ツアー連携',
+          hypothesis: '宿泊者の満足度を0.5向上させる',
+          startDate: '2024-03-01',
+          endDate: '2024-03-31',
+          cost: 15000,
+          revenue: 25000,
+          bookings: 8,
+          survey: 5,
+          status: 'Completed',
+          notes: '協業先の調整済み'
+        }
+      ];
+    }
+
+    function defaultFundingPrograms() {
+      return [
+        { id: 'fund-1', name: '小規模事業者持続化補助金', type: '補助', deadline: '2024-07-15', region: '北海道', industry: '宿泊', stage: 'Running', link: '#', tasks: ['事業計画書ドラフト', '見積書収集', '商工会確認'] },
+        { id: 'fund-2', name: '観光体験DX推進助成', type: '助成', deadline: '2024-08-20', region: '北海道', industry: '観光体験', stage: 'Running', link: '#', tasks: ['体験メニュー整理', 'DX計画書', '証憑整理'] },
+        { id: 'fund-3', name: '地域連携低利融資', type: '融資', deadline: '2024-09-01', region: '北海道', industry: '宿泊', stage: 'Opening予定', link: '#', tasks: ['事業計画', '資金繰り表', '面談資料'] },
+        { id: 'fund-4', name: '宿泊施設改装補助', type: '補助', deadline: '2024-06-30', region: '北海道', industry: '宿泊', stage: 'Idea', link: '#', tasks: ['改装計画', '見積書', '安全計画書'] },
+        { id: 'fund-5', name: '地域観光スタートアップ加速化助成', type: '助成', deadline: '2024-10-15', region: '北海道', industry: 'IT', stage: 'Running', link: '#', tasks: ['プロトタイプ整理', 'KPI設定', '協業先証明'] }
+      ];
+    }
+
+    function defaultPermitTemplates() {
+      return {
+        '飲食': [
+          { id: 'f-1', name: '食品衛生責任者講習', agency: '保健所', contact: '0120-000-123', documents: '申請書、身分証', fee: 10000, eta: 21, status: 'Todo' },
+          { id: 'f-2', name: '飲食店営業許可', agency: '保健所', contact: '0120-000-123', documents: '図面、検査申請', fee: 20000, eta: 45, status: 'Todo' }
+        ],
+        '宿泊': [
+          { id: 's-1', name: '旅館業営業許可', agency: '保健所', contact: '0120-111-234', documents: '申請書、施設図面', fee: 30000, eta: 60, status: 'Todo' },
+          { id: 's-2', name: '消防設備検査', agency: '消防署', contact: '0120-567-890', documents: '検査申込書', fee: 15000, eta: 30, status: 'Todo' }
+        ]
+      };
+    }
+
+    function defaultPermitTasks() {
+      const templates = defaultPermitTemplates();
+      return Object.keys(templates).reduce((acc, key) => {
+        acc[key] = templates[key].map(item => ({ ...item }));
+        return acc;
+      }, {});
+    }
+
+    function defaultKpiRecords() {
+      return [
+        { id: 'kpi-1', month: '2024-02', revenue: 120000, guests: 85, bookings: 60, survey: 4.2, hires: 1, community: 3 },
+        { id: 'kpi-2', month: '2024-03', revenue: 150000, guests: 92, bookings: 70, survey: 4.4, hires: 1, community: 4 },
+        { id: 'kpi-3', month: '2024-04', revenue: 165000, guests: 98, bookings: 75, survey: 4.5, hires: 2, community: 5 }
+      ];
+    }
+
+    function defaultBmcNotes() {
+      const keys = ['KeyPartners','KeyActivities','KeyResources','ValuePropositions','CustomerRelationships','Channels','CustomerSegments','CostStructure','RevenueStreams'];
+      return keys.reduce((acc, key) => {
+        acc[key] = '';
+        return acc;
+      }, {});
+    }
+
+    function defaultPL() {
+      const months = ['2024-05','2024-06','2024-07','2024-08','2024-09','2024-10'];
+      return months.map(month => ({ month, revenue: 160000, cogs: 60000, opex: 40000 }));
+    }
+
+    // ===== Data Provider =====
+    function DataProvider({ children }) {
+      const [startupProfile, setStartupProfile] = useLocalStorageState('startupProfile', defaultStartupProfile);
+      const [experiments, setExperiments] = useLocalStorageState('experiments', defaultExperiments);
+      const [fundingPrograms, setFundingPrograms] = useLocalStorageState('fundingPrograms', defaultFundingPrograms);
+      const [permitTemplates] = useLocalStorageState('permitTemplates', defaultPermitTemplates);
+      const [permitTasks, setPermitTasks] = useLocalStorageState('permitTasks', defaultPermitTasks);
+      const [kpiRecords, setKpiRecords] = useLocalStorageState('kpiRecords', defaultKpiRecords);
+      const [bmcNotes, setBmcNotes] = useLocalStorageState('bmcNotes', defaultBmcNotes);
+      const [plData, setPlData] = useLocalStorageState('plData', defaultPL);
+      const [pricingTier, setPricingTier] = useLocalStorageState('pricingTier', 'Free');
+
+      const value = useMemo(() => ({
+        startupProfile,
+        setStartupProfile,
+        experiments,
+        setExperiments,
+        fundingPrograms,
+        setFundingPrograms,
+        permitTemplates,
+        permitTasks,
+        setPermitTasks,
+        kpiRecords,
+        setKpiRecords,
+        bmcNotes,
+        setBmcNotes,
+        plData,
+        setPlData,
+        pricingTier,
+        setPricingTier
+      }), [startupProfile, experiments, fundingPrograms, permitTemplates, permitTasks, kpiRecords, bmcNotes, plData, pricingTier]);
+
+      return React.createElement(DataContext.Provider, { value }, children);
+    }
+
+    function useNotifier() {
+      const [snack, setSnack] = useState({ open: false, message: '' });
+      const notify = useCallback((message) => setSnack({ open: true, message }), []);
+      const snackbarElement = React.createElement(Snackbar, {
+        open: snack.open,
+        autoHideDuration: 4000,
+        onClose: () => setSnack({ open: false, message: '' })
+      }, React.createElement(Alert, {
+        severity: 'info',
+        onClose: () => setSnack({ open: false, message: '' }),
+        sx: { width: '100%' }
+      }, snack.message));
+      return { notify, snackbarElement };
+    }
+
+    function formatCurrency(value) {
+      if (value === undefined || value === null || value === '') return '¥0';
+      return `¥${Number(value).toLocaleString('ja-JP')}`;
+    }
+
+    function remainingDays(start, end) {
+      const today = new Date();
+      const endDate = new Date(end);
+      return Math.max(0, Math.ceil((endDate - today) / (1000*60*60*24)));
+    }
+
+    // ===== Dashboard Page =====
+    function DashboardPage({ actions }) {
+      const { startupProfile, experiments } = useDataContext();
+      const remaining = remainingDays(startupProfile.termStart, startupProfile.termEnd);
+      const upcomingApplications = [
+        { id: 'app-1', name: '小規模事業者持続化補助金', deadline: '2024-06-21', note: '様式下書きあり' },
+        { id: 'app-2', name: '観光地域新サービス補助', deadline: '2024-07-05', note: '書類ドラフト中' }
+      ];
+      const inProgressCounts = experiments.reduce((acc, exp) => {
+        acc[exp.status] = (acc[exp.status] || 0) + 1;
+        return acc;
+      }, {});
+      const statusChips = [
+        { label: '進行中', key: 'Running', color: 'primary' },
+        { label: '検証待ち', key: 'Completed', color: 'secondary' },
+        { label: '学び反映待ち', key: 'Learned', color: 'success' }
+      ];
+      const learnings = experiments.filter(exp => exp.status === 'Learned');
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Grid, { container: true, spacing: 3 },
+          React.createElement(Grid, { item: true, xs: 12, md: 8 },
+            React.createElement(Grid, { container: true, spacing: 3 },
+              React.createElement(Grid, { item: true, xs: 12 },
+                React.createElement(Card, { sx: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2 } },
+                  React.createElement(Box, null,
+                    React.createElement(Typography, { variant: 'h6' }, `任期：${startupProfile.termStart}〜${startupProfile.termEnd}`),
+                    React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, `残り ${remaining} 日`)
+                  ),
+                  React.createElement(Chip, { label: startupProfile.goal, color: 'success', variant: 'outlined' })
+                )
+              ),
+              React.createElement(Grid, { item: true, xs: 12 },
+                React.createElement(Typography, { variant: 'h6', sx: { mb: 1 } }, '今週の3アクション'),
+                React.createElement(Grid, { container: true, spacing: 2 },
+                  actions.map((action, idx) => React.createElement(Grid, { item: true, xs: 12, md: 4, key: idx },
+                    React.createElement(Card, { sx: { height: '100%' } },
+                      React.createElement(CardContent, null,
+                        React.createElement(Typography, { variant: 'subtitle1', gutterBottom: true }, action.title),
+                        React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, action.reason)
+                      ),
+                      React.createElement(CardActions, null,
+                        React.createElement(Button, { size: 'small', variant: 'contained', color: 'primary' }, action.cta)
+                      )
+                    )
+                  ))
+                )
+              ),
+              React.createElement(Grid, { item: true, xs: 12 },
+                React.createElement(Card, null,
+                  React.createElement(CardContent, null,
+                    React.createElement(Typography, { variant: 'h6', gutterBottom: true }, '実験サマリー'),
+                    React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, spacing: 2 },
+                      statusChips.map((chip) => React.createElement(Card, { key: chip.key, sx: { flex: 1, p: 2 } },
+                        React.createElement(Stack, { direction: 'row', spacing: 1, alignItems: 'center' },
+                          React.createElement(Chip, { label: chip.label, color: chip.color }),
+                          React.createElement(Typography, { variant: 'h5' }, inProgressCounts[chip.key] || 0)
+                        )
+                      ))
+                    )
+                  )
+                )
+              ),
+              React.createElement(Grid, { item: true, xs: 12 },
+                React.createElement(Card, null,
+                  React.createElement(CardContent, null,
+                    React.createElement(Typography, { variant: 'h6', gutterBottom: true }, '申請タイムライン'),
+                    React.createElement(Stack, { spacing: 2 },
+                      upcomingApplications.map(item => React.createElement(Card, { key: item.id, variant: 'outlined' },
+                        React.createElement(CardContent, null,
+                          React.createElement(Typography, { variant: 'subtitle1' }, item.name),
+                          React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, `次の締切まで7日：${item.name}（${item.note}）`)
+                        )
+                      ))
+                    )
+                  )
+                )
+              )
+            )
+          ),
+          React.createElement(Grid, { item: true, xs: 12, md: 4 },
+            React.createElement(Stack, { spacing: 2 },
+              React.createElement(Card, null,
+                React.createElement(CardContent, null,
+                  React.createElement(Typography, { variant: 'h6' }, '最近の学び要約'),
+                  learnings.slice(0, 2).map(exp => React.createElement(Box, { key: exp.id, sx: { mb: 1 } },
+                    React.createElement(Typography, { variant: 'subtitle2' }, exp.title),
+                    React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, exp.notes)
+                  ))
+                )
+              ),
+              React.createElement(Card, null,
+                React.createElement(CardContent, null,
+                  React.createElement(Typography, { variant: 'h6' }, 'To-Apply'),
+                  upcomingApplications.map(app => React.createElement(Box, { key: app.id, sx: { mb: 1 } },
+                    React.createElement(Typography, { variant: 'subtitle2' }, app.name),
+                    React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, `${app.deadline} 締切に向けて準備`)
+                  ))
+                )
+              )
+            )
+          )
+        )
+      );
+    }
+
+    // ===== Experiment Components =====
+    function ExperimentDialog({ open, onClose, onSave, initial }) {
+      const [form, setForm] = useState(() => initial || {
+        title: '',
+        hypothesis: '',
+        startDate: '',
+        endDate: '',
+        cost: '',
+        revenue: '',
+        bookings: '',
+        survey: '',
+        notes: '',
+        status: 'Draft'
+      });
+
+      useEffect(() => {
+        if (open) {
+          setForm(initial || {
+            title: '', hypothesis: '', startDate: '', endDate: '', cost: '', revenue: '', bookings: '', survey: '', notes: '', status: 'Draft'
+          });
+        }
+      }, [open, initial]);
+
+      const handleChange = (field) => (event) => {
+        setForm({ ...form, [field]: event.target.value });
+      };
+
+      const handleSubmit = () => {
+        onSave(form);
+      };
+
+      return React.createElement(Dialog, { open, onClose, fullWidth: true, maxWidth: 'sm' },
+        React.createElement(DialogTitle, null, initial ? '実験を編集' : '実験を追加'),
+        React.createElement(DialogContent, { dividers: true },
+          React.createElement(Stack, { spacing: 2, sx: { mt: 1 } },
+            React.createElement(TextField, { label: 'タイトル', value: form.title, onChange: handleChange('title'), fullWidth: true }),
+            React.createElement(TextField, { label: '仮説', value: form.hypothesis, onChange: handleChange('hypothesis'), multiline: true, rows: 2 }),
+            React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, spacing: 2 },
+              React.createElement(TextField, { label: '開始日', type: 'date', value: form.startDate, onChange: handleChange('startDate'), InputLabelProps: { shrink: true }, fullWidth: true }),
+              React.createElement(TextField, { label: '終了日', type: 'date', value: form.endDate, onChange: handleChange('endDate'), InputLabelProps: { shrink: true }, fullWidth: true })
+            ),
+            React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, spacing: 2 },
+              React.createElement(TextField, { label: 'コスト', type: 'number', value: form.cost, onChange: handleChange('cost'), fullWidth: true }),
+              React.createElement(TextField, { label: '売上', type: 'number', value: form.revenue, onChange: handleChange('revenue'), fullWidth: true })
+            ),
+            React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, spacing: 2 },
+              React.createElement(TextField, { label: '予約', type: 'number', value: form.bookings, onChange: handleChange('bookings'), fullWidth: true }),
+              React.createElement(TextField, { label: 'アンケ', type: 'number', value: form.survey, onChange: handleChange('survey'), fullWidth: true })
+            ),
+            React.createElement(TextField, { label: 'メモ', value: form.notes, onChange: handleChange('notes'), multiline: true, rows: 3 }),
+            React.createElement(FormControl, { fullWidth: true },
+              React.createElement(InputLabel, { id: 'status-label' }, '状態'),
+              React.createElement(Select, { labelId: 'status-label', label: '状態', value: form.status, onChange: handleChange('status') },
+                ['Draft', 'Running', 'Completed', 'Learned', 'Reflected'].map(status => React.createElement(MenuItem, { key: status, value: status }, status))
+              )
+            )
+          )
+        ),
+        React.createElement(DialogActions, null,
+          React.createElement(Button, { onClick: onClose }, 'キャンセル'),
+          React.createElement(Button, { onClick: handleSubmit, variant: 'contained' }, '保存')
+        )
+      );
+    }
+
+    function ExperimentSummaryDrawer({ open, onClose, experiment }) {
+      const summary = experiment ? mockAI.summarizeExperiment(experiment) : null;
+      return React.createElement(Drawer, { anchor: 'right', open, onClose, PaperProps: { sx: { width: { xs: '100%', sm: 360 } } } },
+        React.createElement(Box, { sx: { p: 3 } },
+          experiment && React.createElement(Fragment, null,
+            React.createElement(Typography, { variant: 'h6', gutterBottom: true }, `${experiment.title} のAI学び要約`),
+            React.createElement(Typography, { variant: 'subtitle2', sx: { mt: 2 } }, 'summaryAI'),
+            React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, summary.summaryAI),
+            React.createElement(Typography, { variant: 'subtitle2', sx: { mt: 2 } }, 'nextActionAI'),
+            React.createElement(Stack, { spacing: 1 },
+              summary.nextActionAI.map((item, idx) => React.createElement(Chip, { key: idx, label: item }))
+            ),
+            React.createElement(Typography, { variant: 'subtitle2', sx: { mt: 2 } }, 'tags'),
+            React.createElement(Stack, { direction: 'row', spacing: 1, flexWrap: 'wrap' },
+              summary.tags.map((tag, idx) => React.createElement(Chip, { key: idx, label: tag, color: 'secondary', variant: 'outlined' }))
+            )
+          )
+        )
+      );
+    }
+
+    function ExperimentsPage({ notify }) {
+      const { experiments, setExperiments } = useDataContext();
+      const [dialogOpen, setDialogOpen] = useState(false);
+      const [editing, setEditing] = useState(null);
+      const [viewMode, setViewMode] = useState('table');
+      const [drawerExp, setDrawerExp] = useState(null);
+
+      const handleSave = (form) => {
+        if (!form.title) return;
+        if (editing) {
+          setExperiments(experiments.map(exp => exp.id === editing.id ? { ...editing, ...form } : exp));
+          notify('実験を更新しました');
+        } else {
+          const newExp = { ...form, id: `exp-${Date.now()}` };
+          setExperiments([...experiments, newExp]);
+          notify('実験を追加しました');
+        }
+        setDialogOpen(false);
+        setEditing(null);
+      };
+
+      const handleDelete = (id) => {
+        setExperiments(experiments.filter(exp => exp.id !== id));
+        notify('実験を削除しました');
+      };
+
+      const renderTable = () => React.createElement(TableContainer, { component: Paper },
+        React.createElement(Table, { size: 'small' },
+          React.createElement(TableHead, null,
+            React.createElement(TableRow, null,
+              ['タイトル', '期間', 'コスト', '売上', '予約', 'アンケ', '状態', ''].map(head => React.createElement(TableCell, { key: head }, head))
+            )
+          ),
+          React.createElement(TableBody, null,
+            experiments.map(exp => React.createElement(TableRow, { key: exp.id },
+              React.createElement(TableCell, null, exp.title),
+              React.createElement(TableCell, null, `${exp.startDate}〜${exp.endDate}`),
+              React.createElement(TableCell, null, formatCurrency(exp.cost)),
+              React.createElement(TableCell, null, formatCurrency(exp.revenue)),
+              React.createElement(TableCell, null, exp.bookings),
+              React.createElement(TableCell, null, exp.survey),
+              React.createElement(TableCell, null, exp.status),
+              React.createElement(TableCell, { align: 'right' },
+                React.createElement(Stack, { direction: 'row', spacing: 1, justifyContent: 'flex-end' },
+                  React.createElement(Button, { size: 'small', variant: 'outlined', onClick: () => { setEditing(exp); setDialogOpen(true); } }, '編集'),
+                  React.createElement(Button, { size: 'small', variant: 'text', onClick: () => handleDelete(exp.id) }, '削除'),
+                  React.createElement(Button, { size: 'small', variant: 'contained', onClick: () => setDrawerExp(exp) }, 'AI学び要約')
+                )
+              )
+            ))
+          )
+        )
+      );
+
+      const statuses = ['Draft', 'Running', 'Completed', 'Learned', 'Reflected'];
+      const renderKanban = () => React.createElement(Grid, { container: true, spacing: 2 },
+        statuses.map(status => React.createElement(Grid, { item: true, xs: 12, md: 12 / statuses.length, key: status },
+          React.createElement(Card, { sx: { minHeight: 240 } },
+            React.createElement(CardContent, null,
+              React.createElement(Typography, { variant: 'subtitle1', gutterBottom: true }, status),
+              React.createElement(Stack, { spacing: 1 },
+                experiments.filter(exp => exp.status === status).map(exp => React.createElement(Card, { key: exp.id, variant: 'outlined' },
+                  React.createElement(CardContent, null,
+                    React.createElement(Typography, { variant: 'subtitle2' }, exp.title),
+                    React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, exp.hypothesis),
+                    React.createElement(Stack, { direction: 'row', spacing: 1, sx: { mt: 1 } },
+                      React.createElement(Button, { size: 'small', onClick: () => { setEditing(exp); setDialogOpen(true); } }, '編集'),
+                      React.createElement(Button, { size: 'small', onClick: () => setDrawerExp(exp) }, 'AI要約')
+                    )
+                  )
+                ))
+              )
+            )
+          )
+        ))
+      );
+
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, spacing: 2, sx: { mb: 2 } },
+          React.createElement(Typography, { variant: 'h5' }, '実験ログ'),
+          React.createElement(Stack, { direction: 'row', spacing: 1, alignItems: 'center' },
+            React.createElement(FormControlLabel, {
+              control: React.createElement(Switch, { checked: viewMode === 'kanban', onChange: () => setViewMode(viewMode === 'table' ? 'kanban' : 'table') }),
+              label: viewMode === 'kanban' ? 'Kanban' : 'Table'
+            }),
+            React.createElement(Button, { variant: 'contained', startIcon: React.createElement(Icons.Add), onClick: () => setDialogOpen(true), 'aria-label': '実験を追加' }, '+ 実験を追加')
+          )
+        ),
+        viewMode === 'table' ? renderTable() : renderKanban(),
+        React.createElement(ExperimentDialog, { open: dialogOpen, onClose: () => { setDialogOpen(false); setEditing(null); }, onSave: handleSave, initial: editing }),
+        React.createElement(ExperimentSummaryDrawer, { open: Boolean(drawerExp), onClose: () => setDrawerExp(null), experiment: drawerExp })
+      );
+    }
+
+    // ===== Plan Page =====
+    function PlanPage({ notify }) {
+      const { bmcNotes, setBmcNotes, plData, setPlData, experiments } = useDataContext();
+      const handleBmcChange = (key) => (event) => {
+        setBmcNotes({ ...bmcNotes, [key]: event.target.value });
+      };
+      const handlePLChange = (idx, field) => (event) => {
+        const updated = plData.map((row, i) => i === idx ? { ...row, [field]: Number(event.target.value) } : row);
+        setPlData(updated);
+      };
+      const grossSeries = plData.map(row => row.revenue - row.cogs - row.opex);
+      const reflectExperiments = () => {
+        const deltaRevenue = experiments.filter(exp => ['Completed', 'Learned'].includes(exp.status)).reduce((sum, exp) => sum + Number(exp.revenue || 0) * 0.02, 0);
+        const deltaCost = experiments.filter(exp => exp.status === 'Running').reduce((sum, exp) => sum + Number(exp.cost || 0) * 0.01, 0);
+        const updated = plData.map(row => ({ ...row, revenue: Math.round(row.revenue + deltaRevenue), cogs: Math.round(row.cogs + deltaCost) }));
+        setPlData(updated);
+        notify('実験実績を反映しました（ダミー）');
+      };
+      const bmcLabels = {
+        KeyPartners: 'Key Partners',
+        KeyActivities: 'Key Activities',
+        KeyResources: 'Key Resources',
+        ValuePropositions: 'Value Propositions',
+        CustomerRelationships: 'Customer Relationships',
+        Channels: 'Channels',
+        CustomerSegments: 'Customer Segments',
+        CostStructure: 'Cost Structure',
+        RevenueStreams: 'Revenue Streams'
+      };
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Typography, { variant: 'h5', sx: { mb: 2 } }, '事業計画'),
+        React.createElement(Grid, { container: true, spacing: 2 },
+          Object.keys(bmcLabels).map((key) => React.createElement(Grid, { item: true, xs: 12, md: 4, key },
+            React.createElement(Card, null,
+              React.createElement(CardContent, null,
+                React.createElement(Typography, { variant: 'subtitle1' }, bmcLabels[key]),
+                React.createElement(TextField, { value: bmcNotes[key] || '', onChange: handleBmcChange(key), multiline: true, minRows: 3, fullWidth: true })
+              )
+            )
+          ))
+        ),
+        React.createElement(Box, { sx: { mt: 4 } },
+          React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, sx: { mb: 2 } },
+            React.createElement(Typography, { variant: 'h6' }, '6ヶ月PL'),
+            React.createElement(Button, { variant: 'contained', onClick: reflectExperiments }, '実験実績を反映')
+          ),
+          React.createElement(TableContainer, { component: Paper },
+            React.createElement(Table, { size: 'small' },
+              React.createElement(TableHead, null,
+                React.createElement(TableRow, null,
+                  ['月', '売上', '原価', '販管費', '粗利'].map(head => React.createElement(TableCell, { key: head }, head))
+                )
+              ),
+              React.createElement(TableBody, null,
+                plData.map((row, idx) => React.createElement(TableRow, { key: row.month },
+                  React.createElement(TableCell, null, row.month),
+                  React.createElement(TableCell, null, React.createElement(TextField, { type: 'number', value: row.revenue, onChange: handlePLChange(idx, 'revenue'), size: 'small' })),
+                  React.createElement(TableCell, null, React.createElement(TextField, { type: 'number', value: row.cogs, onChange: handlePLChange(idx, 'cogs'), size: 'small' })),
+                  React.createElement(TableCell, null, React.createElement(TextField, { type: 'number', value: row.opex, onChange: handlePLChange(idx, 'opex'), size: 'small' })),
+                  React.createElement(TableCell, null, formatCurrency(row.revenue - row.cogs - row.opex))
+                ))
+              )
+            )
+          ),
+          React.createElement(Box, { sx: { mt: 3, p: 2, backgroundColor: 'background.paper', borderRadius: 2 } },
+            React.createElement(Typography, { variant: 'subtitle2', gutterBottom: true }, '粗利トレンド（簡易）'),
+            React.createElement(Box, { sx: { display: 'flex', alignItems: 'flex-end', gap: 1, height: 160 } },
+              grossSeries.map((value, idx) => React.createElement(Box, { key: idx, sx: { flex: 1, backgroundColor: 'primary.main', opacity: 0.7, height: `${Math.max(10, value / 2000)}%`, borderRadius: 1 } }))
+            )
+          )
+        )
+      );
+    }
+
+    // ===== Funding Page =====
+    function FundingPage({ notify, onRequestLoanPack }) {
+      const { startupProfile, fundingPrograms, kpiRecords, permitTasks } = useDataContext();
+      const [filters, setFilters] = useState({ industry: '全て', stage: '全て' });
+      const [scoreMap, setScoreMap] = useState({});
+      const [stepperOpen, setStepperOpen] = useState(false);
+      const [stepperProgram, setStepperProgram] = useState(null);
+
+      const filteredPrograms = fundingPrograms.filter(program => {
+        const matchIndustry = filters.industry === '全て' || program.industry === filters.industry;
+        const matchStage = filters.stage === '全て' || program.stage === filters.stage;
+        return matchIndustry && matchStage;
+      });
+
+      const handleScore = (program) => {
+        const score = scoreFunding(startupProfile, program, kpiRecords, permitTasks);
+        setScoreMap(prev => ({ ...prev, [program.id]: score }));
+        notify(`「${program.name}」の適合度は ${score} です`);
+      };
+
+      const lowScoreExists = Object.values(scoreMap).some(score => score < 60);
+
+      const openStepper = (program) => {
+        setStepperProgram(program);
+        setStepperOpen(true);
+      };
+
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Stack, { spacing: 2 },
+          React.createElement(Typography, { variant: 'h5' }, '資金調達ナビ'),
+          React.createElement(Card, null,
+            React.createElement(CardContent, null,
+              React.createElement(Grid, { container: true, spacing: 2 },
+                React.createElement(Grid, { item: true, xs: 12, md: 4 },
+                  React.createElement(TextField, { label: '所在地', value: '北海道', InputProps: { readOnly: true } })
+                ),
+                React.createElement(Grid, { item: true, xs: 12, md: 4 },
+                  React.createElement(FormControl, { fullWidth: true },
+                    React.createElement(InputLabel, { id: 'industry-filter' }, '業種'),
+                    React.createElement(Select, { labelId: 'industry-filter', label: '業種', value: filters.industry, onChange: (e) => setFilters({ ...filters, industry: e.target.value }) },
+                      React.createElement(MenuItem, { value: '全て' }, '全て'),
+                      ['飲食', '宿泊', 'IT', '観光体験'].map(item => React.createElement(MenuItem, { key: item, value: item }, item))
+                    )
+                  )
+                ),
+                React.createElement(Grid, { item: true, xs: 12, md: 4 },
+                  React.createElement(FormControl, { fullWidth: true },
+                    React.createElement(InputLabel, { id: 'stage-filter' }, '段階'),
+                    React.createElement(Select, { labelId: 'stage-filter', label: '段階', value: filters.stage, onChange: (e) => setFilters({ ...filters, stage: e.target.value }) },
+                      React.createElement(MenuItem, { value: '全て' }, '全て'),
+                      ['Idea', 'Running', 'Opening予定'].map(item => React.createElement(MenuItem, { key: item, value: item }, item))
+                    )
+                  )
+                )
+              )
+            )
+          ),
+          lowScoreExists && React.createElement(Card, { sx: { borderLeft: (theme) => `4px solid ${theme.palette.secondary.main}` } },
+            React.createElement(CardContent, null,
+              React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, alignItems: 'center', spacing: 2 },
+                React.createElement(Icons.CreditScore, { color: 'warning' }),
+                React.createElement(Box, { sx: { flex: 1 } },
+                  React.createElement(Typography, { variant: 'subtitle1' }, 'Loan Pack（¥49,800）で資金戦略を強化しませんか？'),
+                  React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, '低いスコアの補助金に備え、チェックアウト風ウィザードで必要情報を整理できます。')
+                ),
+                React.createElement(Button, { variant: 'contained', color: 'secondary', onClick: onRequestLoanPack }, '詳細を見る')
+              )
+            )
+          ),
+          React.createElement(Grid, { container: true, spacing: 2 },
+            filteredPrograms.map(program => React.createElement(Grid, { item: true, xs: 12, md: 6, key: program.id },
+              React.createElement(Card, null,
+                React.createElement(CardContent, null,
+                  React.createElement(Stack, { direction: 'row', justifyContent: 'space-between', alignItems: 'center' },
+                    React.createElement(Box, null,
+                      React.createElement(Typography, { variant: 'h6' }, program.name),
+                      React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, `${program.type} / 締切 ${program.deadline}`)
+                    ),
+                    scoreMap[program.id] !== undefined ? React.createElement(Badge, { color: scoreMap[program.id] >= 70 ? 'primary' : 'warning', badgeContent: `適合度 ${scoreMap[program.id]}` }) : null
+                  ),
+                  React.createElement(Typography, { variant: 'body2', color: 'text.secondary', sx: { mt: 1 } }, '適合スコアを計算')
+                ),
+                React.createElement(CardActions, { sx: { justifyContent: 'space-between' } },
+                  React.createElement(Button, { variant: 'outlined', onClick: () => handleScore(program) }, '適合スコアを計算'),
+                  React.createElement(Button, { variant: 'contained', color: 'primary', onClick: () => openStepper(program) }, '申請タスクを展開')
+                )
+              )
+            ))
+          )
+        ),
+        React.createElement(Dialog, { open: stepperOpen, onClose: () => setStepperOpen(false), maxWidth: 'sm', fullWidth: true },
+          React.createElement(DialogTitle, null, stepperProgram ? `${stepperProgram.name} の提出タスク` : ''),
+          React.createElement(DialogContent, null,
+            stepperProgram && React.createElement(Stepper, { orientation: 'vertical' },
+              stepperProgram.tasks.map((task, idx) => React.createElement(Step, { key: idx, active: true },
+                React.createElement(StepLabel, null, task)
+              ))
+            )
+          ),
+          React.createElement(DialogActions, null,
+            React.createElement(Button, { onClick: () => setStepperOpen(false) }, '閉じる'),
+            React.createElement(Button, { onClick: () => { setStepperOpen(false); notify('タスクチェックを保存しました（ダミー）'); } }, 'チェック完了')
+          )
+        )
+      );
+    }
+
+    // ===== Permits Page =====
+    function PermitsPage({ notify, onRequestConcierge }) {
+      const { permitTemplates, permitTasks, setPermitTasks } = useDataContext();
+      const [industry, setIndustry] = useState('宿泊');
+
+      const tasks = permitTasks[industry] || [];
+
+      const updateStatus = (taskId, status) => {
+        const updated = { ...permitTasks, [industry]: tasks.map(task => task.id === taskId ? { ...task, status } : task) };
+        setPermitTasks(updated);
+        notify('進捗を更新しました');
+      };
+
+      const completion = tasks.length ? Math.round(tasks.filter(task => task.status === 'Approved').length / tasks.length * 100) : 0;
+      const todoCount = tasks.filter(task => task.status === 'Todo').length;
+
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Stack, { spacing: 2 },
+          React.createElement(Typography, { variant: 'h5' }, '許認可トラッカー'),
+          todoCount >= 2 && React.createElement(Card, null,
+            React.createElement(CardContent, null,
+              React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, spacing: 2, alignItems: 'center' },
+                React.createElement(Icons.Assistant, { color: 'primary' }),
+                React.createElement(Box, { sx: { flex: 1 } },
+                  React.createElement(Typography, { variant: 'subtitle1' }, 'Permit Concierge（¥39,800）で専門家に丸投げ'),
+                  React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, '未着手タスクが多い場合は、専門家サポートに切り替えて短期取得を目指しましょう。')
+                ),
+                React.createElement(Button, { variant: 'contained', onClick: onRequestConcierge }, '詳細を見る')
+              )
+            )
+          ),
+          React.createElement(Card, null,
+            React.createElement(CardContent, null,
+              React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, spacing: 2, alignItems: { xs: 'flex-start', sm: 'center' } },
+                React.createElement(FormControl, { sx: { minWidth: 200 } },
+                  React.createElement(InputLabel, { id: 'industry-select' }, '業種テンプレを展開'),
+                  React.createElement(Select, { labelId: 'industry-select', value: industry, label: '業種テンプレを展開', onChange: (e) => setIndustry(e.target.value) },
+                    Object.keys(permitTemplates).map(key => React.createElement(MenuItem, { key: key, value: key }, key))
+                  )
+                ),
+                React.createElement(Stack, { spacing: 1, sx: { flex: 1 } },
+                  React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, `進捗：${completion}%`),
+                  React.createElement(LinearProgress, { variant: 'determinate', value: completion })
+                )
+              )
+            )
+          ),
+          React.createElement(TableContainer, { component: Paper },
+            React.createElement(Table, { size: 'small' },
+              React.createElement(TableHead, null,
+                React.createElement(TableRow, null,
+                  ['タスク', '所管', '連絡先', '必要書類', '費用', '審査日数', 'ステータス'].map(head => React.createElement(TableCell, { key: head }, head))
+                )
+              ),
+              React.createElement(TableBody, null,
+                tasks.map(task => React.createElement(TableRow, { key: task.id },
+                  React.createElement(TableCell, null, task.name),
+                  React.createElement(TableCell, null, task.agency),
+                  React.createElement(TableCell, null, task.contact),
+                  React.createElement(TableCell, null, task.documents),
+                  React.createElement(TableCell, null, formatCurrency(task.fee)),
+                  React.createElement(TableCell, null, `${task.eta} 日`),
+                  React.createElement(TableCell, null,
+                    React.createElement(Select, { size: 'small', value: task.status, onChange: (e) => updateStatus(task.id, e.target.value), 'aria-label': 'ステータス更新' },
+                      ['Todo', 'InProgress', 'WaitingReview', 'Approved'].map(status => React.createElement(MenuItem, { key: status, value: status }, status))
+                    )
+                  )
+                ))
+              )
+            )
+          )
+        )
+      );
+    }
+
+    // ===== KPI Page =====
+    function KpiPage({ notify }) {
+      const { kpiRecords, setKpiRecords } = useDataContext();
+      const [period, setPeriod] = useState('直近3ヶ月');
+      const [form, setForm] = useState({ month: '', revenue: '', guests: '', bookings: '', survey: '', hires: '', community: '' });
+
+      const handleChange = (field) => (event) => setForm({ ...form, [field]: event.target.value });
+
+      const addRecord = () => {
+        if (!form.month) return;
+        const newRecord = { id: `kpi-${Date.now()}`, ...Object.fromEntries(Object.entries(form).map(([key, value]) => [key, key === 'month' ? value : Number(value)])) };
+        setKpiRecords([...kpiRecords, newRecord]);
+        notify('KPIを追加しました');
+        setForm({ month: '', revenue: '', guests: '', bookings: '', survey: '', hires: '', community: '' });
+      };
+
+      const filtered = period === '直近3ヶ月' ? kpiRecords.slice(-3) : kpiRecords;
+
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Stack, { spacing: 2 },
+          React.createElement(Stack, { direction: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' } },
+            React.createElement(Typography, { variant: 'h5' }, 'KPIダッシュ'),
+            React.createElement(FormControl, { size: 'small' },
+              React.createElement(InputLabel, { id: 'period-select' }, '期間'),
+              React.createElement(Select, { labelId: 'period-select', value: period, label: '期間', onChange: (e) => setPeriod(e.target.value) },
+                ['直近3ヶ月', 'すべて'].map(option => React.createElement(MenuItem, { key: option, value: option }, option))
+              )
+            )
+          ),
+          React.createElement(Grid, { container: true, spacing: 2 },
+            [
+              { label: '売上', key: 'revenue', color: 'primary' },
+              { label: '来客', key: 'guests', color: 'success' },
+              { label: '予約', key: 'bookings', color: 'secondary' },
+              { label: 'アンケ満足度', key: 'survey', color: 'warning' },
+              { label: '雇用', key: 'hires', color: 'info' },
+              { label: 'コミュニティ数', key: 'community', color: 'default' }
+            ].map(metric => React.createElement(Grid, { item: true, xs: 12, sm: 6, md: 4, key: metric.key },
+              React.createElement(Card, null,
+                React.createElement(CardContent, null,
+                  React.createElement(Typography, { variant: 'subtitle1' }, metric.label),
+                  React.createElement(Typography, { variant: 'h5' }, filtered.length ? filtered[filtered.length - 1][metric.key] : '-')
+                )
+              )
+            ))
+          ),
+          React.createElement(Card, null,
+            React.createElement(CardContent, null,
+              React.createElement(Typography, { variant: 'subtitle1', gutterBottom: true }, '月次KPIを追加'),
+              React.createElement(Grid, { container: true, spacing: 2 },
+                ['month', 'revenue', 'guests', 'bookings', 'survey', 'hires', 'community'].map(field => React.createElement(Grid, { item: true, xs: 12, sm: 6, md: 3, key: field },
+                  React.createElement(TextField, {
+                    label: field === 'month' ? '月 (YYYY-MM)' : field,
+                    type: field === 'month' ? 'text' : 'number',
+                    value: form[field],
+                    onChange: handleChange(field)
+                  })
+                ))
+              ),
+              React.createElement(Box, { sx: { mt: 2, textAlign: 'right' } },
+                React.createElement(Button, { variant: 'contained', onClick: addRecord }, '追加')
+              )
+            )
+          ),
+          React.createElement(TableContainer, { component: Paper },
+            React.createElement(Table, { size: 'small' },
+              React.createElement(TableHead, null,
+                React.createElement(TableRow, null,
+                  ['月', '売上', '来客', '予約', 'アンケ', '雇用', 'コミュニティ'].map(head => React.createElement(TableCell, { key: head }, head))
+                )
+              ),
+              React.createElement(TableBody, null,
+                kpiRecords.map(record => React.createElement(TableRow, { key: record.id },
+                  React.createElement(TableCell, null, record.month),
+                  React.createElement(TableCell, null, formatCurrency(record.revenue)),
+                  React.createElement(TableCell, null, record.guests),
+                  React.createElement(TableCell, null, record.bookings),
+                  React.createElement(TableCell, null, record.survey),
+                  React.createElement(TableCell, null, record.hires),
+                  React.createElement(TableCell, null, record.community)
+                ))
+              )
+            )
+          )
+        )
+      );
+    }
+
+    // ===== Modal & Auxiliary Components =====
+    function SignInDialog({ open, onClose }) {
+      return React.createElement(Dialog, { open, onClose, maxWidth: 'xs', fullWidth: true },
+        React.createElement(DialogTitle, null, 'サインイン'),
+        React.createElement(DialogContent, null,
+          React.createElement(Stack, { spacing: 2, sx: { mt: 1 } },
+            React.createElement(TextField, { label: 'メールアドレス', type: 'email', fullWidth: true }),
+            React.createElement(TextField, { label: 'パスワード', type: 'password', fullWidth: true })
+          )
+        ),
+        React.createElement(DialogActions, null,
+          React.createElement(Button, { onClick: onClose }, 'キャンセル'),
+          React.createElement(Button, { variant: 'contained', onClick: onClose }, 'サインイン（ダミー）')
+        )
+      );
+    }
+
+    function PricingDialog({ open, onClose, onSelect, currentTier }) {
+      const plans = [
+        { tier: 'Free', price: '¥0', description: '基本機能・単独ユーザー向け' },
+        { tier: 'Starter', price: '¥1,980', description: '実験ログとFundingの優先分析' },
+        { tier: 'Pro', price: '¥4,980', description: '複数メンバーとAIサポート無制限' }
+      ];
+      return React.createElement(Dialog, { open, onClose, maxWidth: 'sm', fullWidth: true },
+        React.createElement(DialogTitle, null, 'プランを選択'),
+        React.createElement(DialogContent, null,
+          React.createElement(Grid, { container: true, spacing: 2 },
+            plans.map(plan => React.createElement(Grid, { item: true, xs: 12, sm: 4, key: plan.tier },
+              React.createElement(Card, { variant: currentTier === plan.tier ? 'outlined' : 'elevation', sx: { height: '100%' } },
+                React.createElement(CardContent, null,
+                  React.createElement(Typography, { variant: 'h6' }, plan.tier),
+                  React.createElement(Typography, { variant: 'h4', sx: { my: 1 } }, plan.price),
+                  React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, plan.description)
+                ),
+                React.createElement(CardActions, null,
+                  React.createElement(Button, { variant: 'contained', fullWidth: true, onClick: () => onSelect(plan.tier), 'aria-label': `${plan.tier}を選択` }, `${plan.tier}にする`)
+                )
+              )
+            ))
+          )
+        ),
+        React.createElement(DialogActions, null,
+          React.createElement(Button, { onClick: onClose }, '閉じる')
+        )
+      );
+    }
+
+    function LoanPackModal({ open, onClose, notify }) {
+      const [step, setStep] = useState(0);
+      const steps = ['事業情報', '財務サマリー', '提出確認'];
+      const proceed = () => {
+        if (step < steps.length - 1) {
+          setStep(step + 1);
+        } else {
+          notify('Loan Packを申し込みました（ダミー）');
+          onClose();
+          setStep(0);
+        }
+      };
+      useEffect(() => { if (!open) setStep(0); }, [open]);
+      return React.createElement(Dialog, { open, onClose, maxWidth: 'sm', fullWidth: true },
+        React.createElement(DialogTitle, null, 'Loan Pack チェックアウト'),
+        React.createElement(DialogContent, null,
+          React.createElement(Stepper, { activeStep: step, alternativeLabel: true, sx: { mb: 2 } },
+            steps.map(label => React.createElement(Step, { key: label }, React.createElement(StepLabel, null, label)))
+          ),
+          React.createElement(Stack, { spacing: 2 },
+            step === 0 && React.createElement(Fragment, null,
+              React.createElement(TextField, { label: '事業概要', multiline: true, minRows: 3, fullWidth: true }),
+              React.createElement(TextField, { label: '希望資金用途', fullWidth: true })
+            ),
+            step === 1 && React.createElement(Fragment, null,
+              React.createElement(TextField, { label: '直近売上（月次）', type: 'number', fullWidth: true }),
+              React.createElement(TextField, { label: '自己資金', type: 'number', fullWidth: true })
+            ),
+            step === 2 && React.createElement(Fragment, null,
+              React.createElement(Typography, { variant: 'body2' }, '提出物：事業計画書 / 売上推移 / 許認可写し（チェックリスト）'),
+              React.createElement(Checkbox, { defaultChecked: true }), '利用規約に同意'
+            )
+          )
+        ),
+        React.createElement(DialogActions, null,
+          React.createElement(Button, { onClick: onClose }, '閉じる'),
+          React.createElement(Button, { variant: 'contained', onClick: proceed }, step === steps.length - 1 ? '申し込む' : '次へ')
+        )
+      );
+    }
+
+    function PermitConciergeModal({ open, onClose, notify }) {
+      const [contact, setContact] = useState('');
+      useEffect(() => { if (!open) setContact(''); }, [open]);
+      return React.createElement(Dialog, { open, onClose, maxWidth: 'sm', fullWidth: true },
+        React.createElement(DialogTitle, null, 'Permit Concierge 相談'),
+        React.createElement(DialogContent, null,
+          React.createElement(Stack, { spacing: 2 },
+            React.createElement(Typography, { variant: 'body2' }, '業種や課題を記入すると専門家が折り返します。'),
+            React.createElement(TextField, { label: '業種・課題', multiline: true, minRows: 3, value: contact, onChange: (e) => setContact(e.target.value) })
+          )
+        ),
+        React.createElement(DialogActions, null,
+          React.createElement(Button, { onClick: onClose }, '閉じる'),
+          React.createElement(Button, { variant: 'contained', onClick: () => { notify('Permit Conciergeに依頼しました（ダミー）'); onClose(); } }, '送信')
+        )
+      );
+    }
+
+    function OnboardingPage() {
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Stack, { spacing: 2 },
+          React.createElement(Typography, { variant: 'h5' }, '初回セットアップ'),
+          React.createElement(Typography, { variant: 'body1' }, '任期や目標を入力してダッシュボードをカスタマイズしましょう。'),
+          React.createElement(Stepper, { orientation: 'vertical', activeStep: 1 },
+            ['プロジェクト情報', '実験の登録', 'Funding候補', '許認可テンプレ確認'].map((label, idx) => React.createElement(Step, { key: idx, active: idx <= 1 }, React.createElement(StepLabel, null, label)))
+          )
+        )
+      );
+    }
+
+    function LoanPackPage({ onOpen }) {
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Card, null,
+          React.createElement(CardContent, null,
+            React.createElement(Typography, { variant: 'h5', gutterBottom: true }, 'Loan Pack'),
+            React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, '資金調達用に必要書類・テンプレートをまとめたチェックアウトウィザードです。'),
+            React.createElement(Button, { sx: { mt: 2 }, variant: 'contained', onClick: onOpen }, 'モーダルを開く')
+          )
+        )
+      );
+    }
+
+    function PermitConciergePage({ onOpen }) {
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Card, null,
+          React.createElement(CardContent, null,
+            React.createElement(Typography, { variant: 'h5', gutterBottom: true }, 'Permit Concierge'),
+            React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, '未着手タスクを専門家と解決するダミー相談導線です。'),
+            React.createElement(Button, { sx: { mt: 2 }, variant: 'contained', onClick: onOpen }, 'モーダルを開く')
+          )
+        )
+      );
+    }
+
+    function CohortPage() {
+      const weeks = [
+        { week: 'Week1', focus: '地域資源の棚卸しと仮説整理' },
+        { week: 'Week2', focus: '実験設計とフィールドテスト' },
+        { week: 'Week3', focus: 'AI分析で学び抽出' },
+        { week: 'Week4', focus: 'Funding資料ドラフト' },
+        { week: 'Week5', focus: '許認可＆手続きクリア' },
+        { week: 'Week6', focus: '実装計画とピッチ練習' }
+      ];
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Stack, { spacing: 2 },
+          React.createElement(Typography, { variant: 'h5' }, '6週間ブートキャンプ概要'),
+          weeks.map(item => React.createElement(Card, { key: item.week },
+            React.createElement(CardContent, null,
+              React.createElement(Typography, { variant: 'subtitle1' }, item.week),
+              React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, item.focus)
+            )
+          ))
+        )
+      );
+    }
+
+    function SettingsPage() {
+      return React.createElement(Box, { sx: { p: 3 } },
+        React.createElement(Stack, { spacing: 2 },
+          React.createElement(Typography, { variant: 'h5' }, '設定'),
+          React.createElement(Card, null,
+            React.createElement(CardContent, null,
+              React.createElement(Typography, { variant: 'subtitle1' }, 'プロフィール'),
+              React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, '表示名や連絡先を編集（ダミー）')
+            )
+          ),
+          React.createElement(Card, null,
+            React.createElement(CardContent, null,
+              React.createElement(Typography, { variant: 'subtitle1' }, '請求'),
+              React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, '請求履歴はアップグレード後に表示されます。')
+            )
+          )
+        )
+      );
+    }
+
+    // ===== Main App =====
+    function App() {
+      const [route, navigate] = useHashRouter('#/dashboard');
+      const { notify, snackbarElement } = useNotifier();
+      const { pricingTier, setPricingTier } = useDataContext();
+      const actions = useMemo(() => mockAI.nextThreeActions({}), []);
+      const [mobileOpen, setMobileOpen] = useState(false);
+      const [signInOpen, setSignInOpen] = useState(false);
+      const [pricingOpen, setPricingOpen] = useState(false);
+      const [loanPackOpen, setLoanPackOpen] = useState(false);
+      const [permitConciergeOpen, setPermitConciergeOpen] = useState(false);
+
+      const navItems = [
+        { label: 'Dashboard', icon: Icons.Dashboard, path: '#/dashboard' },
+        { label: 'Experiments', icon: Icons.Science, path: '#/experiments' },
+        { label: 'Plan', icon: Icons.EventNote, path: '#/plan' },
+        { label: 'Funding', icon: Icons.MonetizationOn, path: '#/funding' },
+        { label: 'Permits', icon: Icons.Gavel, path: '#/permits' },
+        { label: 'KPI', icon: Icons.ShowChart, path: '#/kpi' },
+        { label: 'Settings', icon: Icons.Settings, path: '#/settings' }
+      ];
+
+      const handleNavigate = (path) => {
+        navigate(path);
+        setMobileOpen(false);
+      };
+
+      const renderContent = () => {
+        switch (route.replace('#', '')) {
+          case '/dashboard':
+            return React.createElement(DashboardPage, { actions });
+          case '/experiments':
+            return React.createElement(ExperimentsPage, { notify });
+          case '/plan':
+            return React.createElement(PlanPage, { notify });
+          case '/funding':
+            return React.createElement(FundingPage, { notify, onRequestLoanPack: () => setLoanPackOpen(true) });
+          case '/permits':
+            return React.createElement(PermitsPage, { notify, onRequestConcierge: () => setPermitConciergeOpen(true) });
+          case '/kpi':
+            return React.createElement(KpiPage, { notify });
+          case '/settings':
+            return React.createElement(SettingsPage, null);
+          case '/onboarding':
+            return React.createElement(OnboardingPage, null);
+          case '/loan-pack':
+            return React.createElement(LoanPackPage, { onOpen: () => setLoanPackOpen(true) });
+          case '/permit-concierge':
+            return React.createElement(PermitConciergePage, { onOpen: () => setPermitConciergeOpen(true) });
+          case '/cohort':
+            return React.createElement(CohortPage, null);
+          default:
+            return React.createElement(DashboardPage, { actions });
+        }
+      };
+
+      const drawer = React.createElement(Box, { sx: { width: 240 } },
+        React.createElement(Toolbar, null,
+          React.createElement(Typography, { variant: 'subtitle1', sx: { fontWeight: 600 } }, 'プロジェクトナビ')
+        ),
+        React.createElement(Divider, null),
+        React.createElement(List, null,
+          navItems.map(item => React.createElement(ListItemButton, {
+            key: item.path,
+            selected: route === item.path,
+            onClick: () => handleNavigate(item.path)
+          },
+            React.createElement(ListItemIcon, null, React.createElement(item.icon, null)),
+            React.createElement(ListItemText, { primary: item.label })
+          ))
+        ),
+        React.createElement(Divider, null),
+        React.createElement(List, null,
+          [
+            { label: 'Onboarding', icon: Icons.RocketLaunch, path: '#/onboarding' },
+            { label: 'Loan Pack', icon: Icons.CreditScore, path: '#/loan-pack' },
+            { label: 'Permit Concierge', icon: Icons.Assistant, path: '#/permit-concierge' },
+            { label: 'Cohort', icon: Icons.School, path: '#/cohort' }
+          ].map(item => React.createElement(ListItemButton, {
+            key: item.path,
+            selected: route === item.path,
+            onClick: () => handleNavigate(item.path)
+          },
+            React.createElement(ListItemIcon, null, React.createElement(item.icon, null)),
+            React.createElement(ListItemText, { primary: item.label })
+          ))
+        )
+      );
+
+      return React.createElement(Box, { sx: { display: 'flex' } },
+        React.createElement(AppBar, { position: 'fixed', sx: { zIndex: (theme) => theme.zIndex.drawer + 1, backgroundColor: 'primary.main' } },
+          React.createElement(Toolbar, null,
+            React.createElement(IconButton, { color: 'inherit', edge: 'start', sx: { mr: 2, display: { md: 'none' } }, onClick: () => setMobileOpen(!mobileOpen), 'aria-label': 'メニューを開く' }, React.createElement(Icons.Menu, null)),
+            React.createElement(Typography, { variant: 'h6', sx: { flexGrow: 0, fontWeight: 700 } }, '起業OS（協力隊）'),
+            React.createElement(Box, { sx: { flexGrow: 1, mx: 3, display: { xs: 'none', sm: 'block' } } },
+              React.createElement(TextField, { size: 'small', placeholder: '検索（ダミー）', sx: { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 2, minWidth: 240 }, InputProps: { sx: { color: 'white' } } })
+            ),
+            React.createElement(Button, { color: 'inherit', onClick: () => setPricingOpen(true), 'aria-label': 'アップグレード' }, `アップグレード (${pricingTier})`),
+            React.createElement(Button, { color: 'inherit', onClick: () => setSignInOpen(true), sx: { ml: 1 }, variant: 'outlined', 'aria-label': 'サインイン' }, 'サインイン')
+          )
+        ),
+        React.createElement(Box, { component: 'nav', sx: { width: { md: 240 }, flexShrink: { md: 0 } }, 'aria-label': 'メインナビゲーション' },
+          React.createElement(Drawer, {
+            variant: 'temporary',
+            open: mobileOpen,
+            onClose: () => setMobileOpen(false),
+            ModalProps: { keepMounted: true },
+            sx: { display: { xs: 'block', md: 'none' }, '& .MuiDrawer-paper': { width: 240 } }
+          }, drawer),
+          React.createElement(Drawer, {
+            variant: 'permanent',
+            open: true,
+            sx: { display: { xs: 'none', md: 'block' }, '& .MuiDrawer-paper': { width: 240, boxSizing: 'border-box' } }
+          }, drawer)
+        ),
+        React.createElement(Box, { component: 'main', sx: { flexGrow: 1, p: 3, mt: 8, minHeight: '100vh', backgroundColor: '#f5f7f5' } },
+          renderContent()
+        ),
+        snackbarElement,
+        React.createElement(SignInDialog, { open: signInOpen, onClose: () => setSignInOpen(false) }),
+        React.createElement(PricingDialog, { open: pricingOpen, onClose: () => setPricingOpen(false), currentTier: pricingTier, onSelect: (tier) => { setPricingTier(tier); notify(`${tier}プランに切り替えました（ダミー）`); setPricingOpen(false); } }),
+        React.createElement(LoanPackModal, { open: loanPackOpen, onClose: () => setLoanPackOpen(false), notify }),
+        React.createElement(PermitConciergeModal, { open: permitConciergeOpen, onClose: () => setPermitConciergeOpen(false), notify })
+      );
+    }
+
+    function Root() {
+      const theme = useMemo(() => createTheme({
+        palette: {
+          primary: { main: '#1b5e20' },
+          secondary: { main: '#3b6ea5' }
+        },
+        shape: { borderRadius: 10 },
+        typography: {
+          h5: { fontWeight: 600 },
+          body1: { fontSize: '0.95rem' }
+        }
+      }), []);
+      return React.createElement(ThemeProvider, { theme },
+        React.createElement(CssBaseline, null),
+        React.createElement(DataProvider, null,
+          React.createElement(App, null)
+        )
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(Root, null));
+  </script>
+</body>
+</html>
