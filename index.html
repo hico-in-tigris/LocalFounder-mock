@@ -26,12 +26,13 @@
   <script src="https://unpkg.com/@mui/icons-material@5.15.15/umd/material-ui-icons.development.js"></script>
 
   <script>
-    const { useState, useEffect, useMemo, useCallback, useContext, createContext, Fragment } = React;
+    const { useState, useEffect, useMemo, useCallback, useContext, createContext, Fragment, useRef } = React;
     const {
       ThemeProvider,
       createTheme,
       CssBaseline,
       Box,
+      Container,
       AppBar,
       Toolbar,
       Typography,
@@ -39,6 +40,7 @@
       Button,
       Drawer,
       List,
+      ListItem,
       ListItemButton,
       ListItemIcon,
       ListItemText,
@@ -46,6 +48,7 @@
       TextField,
       Grid,
       Card,
+      CardHeader,
       CardContent,
       CardActions,
       Chip,
@@ -135,6 +138,35 @@
           { title: '地域メディアへPR送付', reason: '夏休み集客を狙う', cta: 'ドラフトメールを送る' }
         ];
         return suggestions.slice(0,3);
+      },
+      reply(message) {
+        const text = (message || '').trim();
+        const randomPick = (options) => options[Math.floor(Math.random() * options.length)];
+        if (!text) {
+          return 'まずは聞きたいテーマを教えてください。許認可、融資、実験計画などにも応えます。';
+        }
+        if (text.includes('許認可')) {
+          const templates = [
+            '許認可対応のToDoです。1) 必要書類の棚卸し 2) 役所との事前相談 3) 取得後の運用体制メモをまとめましょう。',
+            '許認可準備ステップを提案します。① 手続きフローの可視化 ② 必要資料の期限逆算 ③ 担当者ごとの役割を決めましょう。',
+            '許認可タスクを3点に整理しました。A. 管轄部署への確認 B. 施設・図面の最新版共有 C. 提出前のセルフチェックリスト整備です。'
+          ];
+          return randomPick(templates);
+        }
+        if (text.includes('融資')) {
+          const templates = [
+            '融資準備の基本セットです。1) 最新のPL/BS 2) 事業計画書 3) 資金繰り表を整備し、次の一手として面談の想定問答を作りましょう。',
+            '融資に向けたドキュメントは「直近決算」「資金繰り表」「担保説明資料」の3点を。次は金融機関との打診スケジュールを固めましょう。',
+            '融資対応で揃えたいのは、A. 直近の試算表 B. 設備投資計画 C. 返済計画。次はシミュレーションを用意して面談準備です。'
+          ];
+          return randomPick(templates);
+        }
+        const templates = [
+          '実験データはPLのどこに反映するかを決めましょう。粗利と販促費のインパクトを追記すると、次の意思決定がしやすくなります。',
+          '実験結果は仮説ごとに整理し、PLでは売上と費用のどこへ反映させるかをメモ化しましょう。翌週の会議で提案しやすくなります。',
+          '実験サイクルから得た学びは、PLの販管費内訳とROIコメント欄に追記しておくと、数字の説得力が高まります。'
+        ];
+        return randomPick(templates);
       }
     };
 
@@ -272,6 +304,38 @@
       return months.map(month => ({ month, revenue: 160000, cogs: 60000, opex: 40000 }));
     }
 
+    function defaultChatMessages() {
+      return [
+        { id: 'ai-hello', role: 'ai', text: 'こんにちは！本日の相談テーマはありますか？許認可や融資の準備など何でもどうぞ。' },
+        { id: 'you-intro', role: 'you', text: '今週のタスク整理と許認可の段取りを知りたいです。' },
+        { id: 'ai-guide', role: 'ai', text: '許認可は書類棚卸し→担当決め→提出準備の順番が効率的ですよ。' }
+      ];
+    }
+
+    function defaultChangeLog() {
+      return [
+        { id: 'log-1', title: 'BMC更新', detail: '価値提案を「地域回遊ツアー付宿泊」に更新', date: '2024-06-01' },
+        { id: 'log-2', title: '実験登録', detail: 'ワーケーションプランABテストを追加', date: '2024-06-05' },
+        { id: 'log-3', title: 'PL反映', detail: '実験結果を販促費に反映', date: '2024-06-10' }
+      ];
+    }
+
+    function defaultApprovals() {
+      return [
+        { id: 'ap-1', item: '旅館業営業許可', owner: '保健所', due: '2024-06-20', status: '提出準備中', progress: 70 },
+        { id: 'ap-2', item: '消防設備検査', owner: '消防署', due: '2024-06-25', status: '日程調整', progress: 45 },
+        { id: 'ap-3', item: '食品衛生講習', owner: '保健所', due: '2024-07-05', status: '受講予約済', progress: 20 }
+      ];
+    }
+
+    function defaultTasks() {
+      return [
+        { id: 'task-1', title: '宿泊プラン資料の更新', priority: '高', due: '2024-06-18', owner: '田中', done: false },
+        { id: 'task-2', title: '許認可の必要書類整理', priority: '中', due: '2024-06-19', owner: '佐藤', done: false },
+        { id: 'task-3', title: '融資面談の想定問答作成', priority: '高', due: '2024-06-22', owner: '高橋', done: true }
+      ];
+    }
+
     // ===== Data Provider =====
     function DataProvider({ children }) {
       const [startupProfile, setStartupProfile] = useLocalStorageState('startupProfile', defaultStartupProfile);
@@ -331,6 +395,255 @@
       const today = new Date();
       const endDate = new Date(end);
       return Math.max(0, Math.ceil((endDate - today) / (1000*60*60*24)));
+    }
+
+    function TabPanel({ children, value, index }) {
+      return React.createElement(Box, {
+        role: 'tabpanel',
+        hidden: value !== index,
+        id: `info-tabpanel-${index}`,
+        'aria-labelledby': `info-tab-${index}`
+      },
+        value === index ? React.createElement(Box, { sx: { p: 3 } }, children) : null
+      );
+    }
+
+    function AIChatCard({ messages, setMessages }) {
+      const [input, setInput] = useState('');
+      const [sending, setSending] = useState(false);
+      const [snack, setSnack] = useState({ open: false, message: '' });
+      const listRef = useRef(null);
+
+      useEffect(() => {
+        if (listRef.current) {
+          listRef.current.scrollTop = listRef.current.scrollHeight;
+        }
+      }, [messages]);
+
+      const handleSend = () => {
+        const trimmed = input.trim();
+        if (!trimmed) return;
+        const userMessage = { id: `you-${Date.now()}`, role: 'you', text: trimmed };
+        setMessages((prev) => [...prev, userMessage]);
+        setInput('');
+        setSending(true);
+        const delay = 500 + Math.floor(Math.random() * 600);
+        setTimeout(() => {
+          const aiMessage = { id: `ai-${Date.now()}`, role: 'ai', text: mockAI.reply(trimmed) };
+          setMessages((prev) => [...prev, aiMessage]);
+          setSending(false);
+          setSnack({ open: true, message: 'AIが回答しました' });
+        }, delay);
+      };
+
+      const handleSnackClose = (_, reason) => {
+        if (reason === 'clickaway') return;
+        setSnack({ open: false, message: '' });
+      };
+
+      return React.createElement(Card, { sx: { height: '100%' } },
+        React.createElement(CardHeader, {
+          title: 'AIアシスタント',
+          subheader: '企画・許認可・資金調達の相談に答えます(擬似)'
+        }),
+        React.createElement(CardContent, null,
+          React.createElement(Box, { ref: listRef, sx: { maxHeight: 320, overflow: 'auto' } },
+            React.createElement(List, { disablePadding: true },
+              messages.map((msg, idx) => React.createElement(Fragment, { key: msg.id },
+                React.createElement(ListItem, {
+                  sx: {
+                    justifyContent: msg.role === 'you' ? 'flex-end' : 'flex-start'
+                  }
+                },
+                  React.createElement(Box, {
+                    sx: {
+                      px: 2,
+                      py: 1.5,
+                      maxWidth: '85%',
+                      borderRadius: 2,
+                      boxShadow: 0,
+                      bgcolor: msg.role === 'you' ? 'primary.light' : 'background.paper',
+                      color: msg.role === 'you' ? 'primary.contrastText' : 'text.primary',
+                      textAlign: msg.role === 'you' ? 'right' : 'left'
+                    }
+                  }, msg.text)
+                ),
+                idx < messages.length - 1 ? React.createElement(Divider, { component: 'li', sx: { my: 0.5 } }) : null
+              ))
+            )
+          ),
+          sending ? React.createElement(Box, { sx: { mt: 2 } }, React.createElement(LinearProgress, { color: 'secondary' })) : null
+        ),
+        React.createElement(CardActions, {
+          sx: {
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 1,
+            p: 2
+          }
+        },
+          React.createElement(TextField, {
+            label: 'メッセージを入力',
+            value: input,
+            onChange: (event) => setInput(event.target.value),
+            fullWidth: true,
+            multiline: true,
+            minRows: 2
+          }),
+          React.createElement(Button, {
+            variant: 'contained',
+            onClick: handleSend,
+            disabled: sending || !input.trim(),
+            sx: { minWidth: 120 }
+          }, sending ? '送信中…' : '送信')
+        ),
+        React.createElement(Snackbar, {
+          open: snack.open,
+          autoHideDuration: 4000,
+          onClose: handleSnackClose,
+          anchorOrigin: { vertical: 'bottom', horizontal: 'center' }
+        },
+          React.createElement(Alert, { severity: 'success', sx: { width: '100%' }, onClose: handleSnackClose }, snack.message)
+        )
+      );
+    }
+
+    function InfoTabs({ messages, changeLog, approvals, tasks, setTasks }) {
+      const [tab, setTab] = useState(0);
+
+      const recentMessages = useMemo(() => messages.slice(-3), [messages]);
+      const summaryText = recentMessages.length
+        ? recentMessages.map((msg) => `${msg.role === 'you' ? 'あなた' : 'AI'}: ${msg.text}`).join(' / ')
+        : 'まだ会話がありません。質問してみましょう。';
+
+      const importantTags = useMemo(() => {
+        const combined = recentMessages.map((msg) => msg.text).join(' ');
+        const tags = [];
+        if (combined.includes('許認可')) tags.push('許認可');
+        if (combined.includes('融資')) tags.push('資金調達');
+        if (combined.includes('PL') || combined.includes('実験')) tags.push('実験→PL反映');
+        if (!tags.length) tags.push('タスク整理');
+        return Array.from(new Set(tags));
+      }, [recentMessages]);
+
+      const handleTabChange = (_, newValue) => setTab(newValue);
+
+      const toggleTask = (taskId) => {
+        setTasks((prev) => prev.map((task) => task.id === taskId ? { ...task, done: !task.done } : task));
+      };
+
+      const approvalStatusColor = (status) => {
+        if (status.includes('準備')) return 'warning';
+        if (status.includes('調整')) return 'info';
+        if (status.includes('待ち')) return 'secondary';
+        return 'success';
+      };
+
+      const priorityColor = (priority) => {
+        switch (priority) {
+          case '高':
+            return 'error';
+          case '中':
+            return 'warning';
+          default:
+            return 'default';
+        }
+      };
+
+      return React.createElement(Card, { sx: { height: '100%' } },
+        React.createElement(Box, { sx: { borderBottom: 1, borderColor: 'divider' } },
+          React.createElement(Tabs, {
+            value: tab,
+            onChange: handleTabChange,
+            variant: 'scrollable',
+            scrollButtons: 'auto',
+            'aria-label': '情報タブ'
+          },
+            ['チャット', '更新履歴', '承認フロー', 'タスク'].map((label, index) =>
+              React.createElement(Tab, { key: label, label, id: `info-tab-${index}`, 'aria-controls': `info-tabpanel-${index}` })
+            )
+          )
+        ),
+        React.createElement(TabPanel, { value: tab, index: 0 },
+          React.createElement(Stack, { spacing: 2 },
+            React.createElement(Typography, { variant: 'subtitle1' }, '直近の会話サマリー'),
+            React.createElement(Typography, { variant: 'body2', color: 'text.secondary' }, summaryText),
+            React.createElement(Divider, null),
+            React.createElement(Stack, { direction: 'row', spacing: 1, flexWrap: 'wrap' },
+              importantTags.map((tag) => React.createElement(Chip, { key: tag, label: tag, color: 'primary', variant: 'outlined' }))
+            )
+          )
+        ),
+        React.createElement(TabPanel, { value: tab, index: 1 },
+          React.createElement(List, { disablePadding: true },
+            changeLog.map((item) => React.createElement(ListItem, { key: item.id, alignItems: 'flex-start', divider: true },
+              React.createElement(ListItemText, {
+                primary: `${item.title}（${item.date}）`,
+                secondary: item.detail
+              })
+            )),
+            changeLog.length === 0 ? React.createElement(ListItem, null,
+              React.createElement(ListItemText, { primary: 'まだ更新履歴がありません。' })
+            ) : null
+          )
+        ),
+        React.createElement(TabPanel, { value: tab, index: 2 },
+          React.createElement(TableContainer, { component: Paper },
+            React.createElement(Table, { size: 'small' },
+              React.createElement(TableHead, null,
+                React.createElement(TableRow, null,
+                  ['項目', '申請先', '期限', '状態', '進捗'].map((head) => React.createElement(TableCell, { key: head }, head))
+                )
+              ),
+              React.createElement(TableBody, null,
+                approvals.map((row) => React.createElement(TableRow, { key: row.id },
+                  React.createElement(TableCell, null, row.item),
+                  React.createElement(TableCell, null, row.owner),
+                  React.createElement(TableCell, null, row.due),
+                  React.createElement(TableCell, null,
+                    React.createElement(Chip, { label: row.status, color: approvalStatusColor(row.status), size: 'small' })
+                  ),
+                  React.createElement(TableCell, null,
+                    React.createElement(Stack, { spacing: 1 },
+                      React.createElement(LinearProgress, { variant: 'determinate', value: row.progress }),
+                      React.createElement(Typography, { variant: 'caption', color: 'text.secondary' }, `${row.progress}%`)
+                    )
+                  )
+                ))
+              )
+            )
+          )
+        ),
+        React.createElement(TabPanel, { value: tab, index: 3 },
+          React.createElement(TableContainer, { component: Paper },
+            React.createElement(Table, { size: 'small' },
+              React.createElement(TableHead, null,
+                React.createElement(TableRow, null,
+                  ['タスク', '優先度', '期限', '担当', '完了'].map((head) => React.createElement(TableCell, { key: head }, head))
+                )
+              ),
+              React.createElement(TableBody, null,
+                tasks.map((task) => React.createElement(TableRow, { key: task.id },
+                  React.createElement(TableCell, null, task.title),
+                  React.createElement(TableCell, null,
+                    React.createElement(Chip, { label: task.priority, color: priorityColor(task.priority), size: 'small' })
+                  ),
+                  React.createElement(TableCell, null, task.due),
+                  React.createElement(TableCell, null, task.owner),
+                  React.createElement(TableCell, null,
+                    React.createElement(Checkbox, {
+                      checked: task.done,
+                      onChange: () => toggleTask(task.id),
+                      inputProps: { 'aria-label': `${task.title}の完了状況` }
+                    })
+                  )
+                ))
+              )
+            )
+          )
+        )
+      );
     }
 
     // ===== Dashboard Page =====
@@ -1152,6 +1465,10 @@
       const { notify, snackbarElement } = useNotifier();
       const { pricingTier, setPricingTier } = useDataContext();
       const actions = useMemo(() => mockAI.nextThreeActions({}), []);
+      const [chatMessages, setChatMessages] = useLocalStorageState('ai_chat_threads', defaultChatMessages);
+      const [changeLog] = useLocalStorageState('change_log', defaultChangeLog);
+      const [approvals] = useLocalStorageState('approvals', defaultApprovals);
+      const [tasks, setTasks] = useLocalStorageState('tasks', defaultTasks);
       const [mobileOpen, setMobileOpen] = useState(false);
       const [signInOpen, setSignInOpen] = useState(false);
       const [pricingOpen, setPricingOpen] = useState(false);
@@ -1261,8 +1578,20 @@
             sx: { display: { xs: 'none', md: 'block' }, '& .MuiDrawer-paper': { width: 240, boxSizing: 'border-box' } }
           }, drawer)
         ),
-        React.createElement(Box, { component: 'main', sx: { flexGrow: 1, p: 3, mt: 8, minHeight: '100vh', backgroundColor: '#f5f7f5' } },
-          renderContent()
+        React.createElement(Box, { component: 'main', sx: { flexGrow: 1, mt: 8, minHeight: '100vh', backgroundColor: '#f5f7f5' } },
+          React.createElement(Box, { sx: { p: 2 } },
+            React.createElement(Container, { maxWidth: 'xl' },
+              React.createElement(Grid, { container: true, spacing: 2 },
+                React.createElement(Grid, { item: true, xs: 12, md: 6 },
+                  React.createElement(AIChatCard, { messages: chatMessages, setMessages: setChatMessages })
+                ),
+                React.createElement(Grid, { item: true, xs: 12, md: 6 },
+                  React.createElement(InfoTabs, { messages: chatMessages, changeLog, approvals, tasks, setTasks })
+                )
+              )
+            )
+          ),
+          React.createElement(Box, { sx: { p: 3 } }, renderContent())
         ),
         snackbarElement,
         React.createElement(SignInDialog, { open: signInOpen, onClose: () => setSignInOpen(false) }),
